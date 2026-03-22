@@ -97,6 +97,16 @@ bool Recorder::start(const std::string& filepath, int sample_rate, int channels)
     ring_read_pos_ = 0;
     pcm_buffer_.resize(4096);
 
+    // Ensure the parent directory exists for the target filepath
+    {
+        std::string parent;
+        size_t sep = filepath.find_last_of("/\\");
+        if (sep != std::string::npos) {
+            parent = filepath.substr(0, sep);
+            mkdirs(parent);
+        }
+    }
+
     file_.open(filepath, std::ios::binary);
     if (!file_.is_open()) {
         std::cerr << "Recorder: failed to open " << filepath << std::endl;

@@ -71,51 +71,62 @@ jobs:
     - name: Bundle Dylibs
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
+        set -e
         mkdir -p staging
         cp build/guitar-amp staging/
 
         echo "=== Original linked libraries ==="
         otool -L staging/guitar-amp
 
-        # Find and bundle all non-system dylibs (Homebrew, local, etc.)
-        bundle_dylib() {
-          local binary="$1"
-          otool -L "$binary" | tail -n +2 | awk '{print $1}' | while read -r lib; do
-            # Skip system/framework libs
-            case "$lib" in
-              /usr/lib/*|/System/*|@executable_path/*|@rpath/*|@loader_path/*) continue ;;
-            esac
-            local libname=$(basename "$lib")
-            if [ ! -f "staging/$libname" ]; then
-              echo "Bundling: $lib -> staging/$libname"
-              cp -L "$lib" "staging/$libname"
-              chmod 644 "staging/$libname"
-              # Recursively check this dylib's own dependencies
-              bundle_dylib "staging/$libname"
-            fi
-            # Fix the reference in the binary
-            install_name_tool -change "$lib" "@executable_path/$libname" "$binary" 2>/dev/null || true
-          done
-        }
+        # Step 1: Find all non-system dylibs the binary links to (file-based, no pipe subshell)
+        otool -L staging/guitar-amp | tail -n +2 | awk '{print $1}' > /tmp/deps.txt
+        cat /tmp/deps.txt
 
-        bundle_dylib staging/guitar-amp
+        # Step 2: Copy each non-system dylib and fix the reference in the binary
+        while IFS= read -r lib; do
+          case "$lib" in
+            /usr/lib/*|/System/*|@executable_path/*|@rpath/*|@loader_path/*) continue ;;
+          esac
+          libname=$(basename "$lib")
+          echo ">>> Bundling: $lib -> staging/$libname"
+          cp -L "$lib" "staging/$libname"
+          chmod 644 "staging/$libname"
+          echo ">>> Fixing reference: $lib -> @executable_path/$libname"
+          install_name_tool -change "$lib" "@executable_path/$libname" staging/guitar-amp
+        done < /tmp/deps.txt
 
-        # Also fix inter-dylib references
+        # Step 3: For each bundled dylib, fix ITS non-system dependencies too
         for dylib in staging/*.dylib; do
           [ -f "$dylib" ] || continue
-          otool -L "$dylib" | tail -n +2 | awk '{print $1}' | while read -r lib; do
+          libname=$(basename "$dylib")
+          echo ">>> Fixing dylib id: $libname"
+          install_name_tool -id "@executable_path/$libname" "$dylib"
+
+          otool -L "$dylib" | tail -n +2 | awk '{print $1}' > /tmp/subdeps.txt
+          while IFS= read -r lib; do
             case "$lib" in
               /usr/lib/*|/System/*|@executable_path/*|@rpath/*|@loader_path/*) continue ;;
             esac
-            local libname=$(basename "$lib")
-            install_name_tool -change "$lib" "@executable_path/$libname" "$dylib" 2>/dev/null || true
-          done
-          # Fix the dylib's own id
-          install_name_tool -id "@executable_path/$(basename $dylib)" "$dylib" 2>/dev/null || true
+            depname=$(basename "$lib")
+            echo ">>> Fixing sub-dep in $libname: $lib -> @executable_path/$depname"
+            if [ ! -f "staging/$depname" ]; then
+              cp -L "$lib" "staging/$depname"
+              chmod 644 "staging/$depname"
+              install_name_tool -id "@executable_path/$depname" "staging/$depname"
+            fi
+            install_name_tool -change "$lib" "@executable_path/$depname" "$dylib"
+          done < /tmp/subdeps.txt
         done
 
+        echo ""
         echo "=== After bundling ==="
         otool -L staging/guitar-amp
+        echo "=== Dylib links ==="
+        for f in staging/*.dylib; do
+          [ -f "$f" ] || continue
+          echo "--- $(basename $f) ---"
+          otool -L "$f"
+        done
         echo "=== Staged files ==="
         ls -la staging/
 

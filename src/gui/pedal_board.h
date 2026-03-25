@@ -3,6 +3,7 @@
 #include "common.h"
 #include "audio/audio_engine.h"
 #include "gui/command_history.h"
+#include <set>
 
 namespace GuitarAmp {
 
@@ -36,6 +37,9 @@ public:
     /** @brief Whether only enabled pedals are shown (default true). */
     bool show_active_only() const { return show_active_only_; }
 
+    /** @brief Update which pedals are visible based on current state. */
+    void update_visible_pedals();
+
 private:
     /** @brief Render the "+ Add Pedal" button and its popup menu. */
     void render_add_pedal_menu();
@@ -53,6 +57,7 @@ private:
     CommandHistory& history_;
     std::vector<std::unique_ptr<PedalWidget>> widgets_;
     bool show_active_only_ = true;
+    std::set<int> visible_indices_; // Indices of pedals that should be visible
 };
 
 } // namespace GuitarAmp

@@ -15,6 +15,7 @@
 #include "audio/effects/amp_simulator.h"
 #include "audio/effects/tuner.h"
 #include <cstring>
+#include <set>
 
 #include <imgui.h>
 #include <algorithm>
@@ -30,14 +31,53 @@ PedalBoard::PedalBoard(AudioEngine& engine, CommandHistory& history)
 /** @brief Default destructor. */
 PedalBoard::~PedalBoard() = default;
 
+/** @brief Update which pedals are visible based on current state. */
+void PedalBoard::update_visible_pedals() {
+    visible_indices_.clear();
+    auto& effects = engine_.effects();
+    
+    // Always show EQ and Reverb if they exist
+    for (int i = 0; i < static_cast<int>(effects.size()); ++i) {
+        const char* name = effects[i]->name();
+        if (std::strcmp(name, "Equalizer") == 0 || std::strcmp(name, "Reverb") == 0) {
+            visible_indices_.insert(i);
+        }
+    }
+    
+    // Add any other pedals that were explicitly added (not just enabled)
+    // We'll track this in rebuild_widgets() when new effects are added
+}
+
 /** @brief Recreate PedalWidget list to match the engine's current effect chain. */
 void PedalBoard::rebuild_widgets() {
+    // Remember which effects were visible before rebuild
+    std::set<std::string> visible_names;
+    for (int idx : visible_indices_) {
+        if (idx < static_cast<int>(widgets_.size())) {
+            visible_names.insert(widgets_[idx]->get_effect()->name());
+        }
+    }
+    
     widgets_.clear();
     auto& effects = engine_.effects();
     for (int i = 0; i < static_cast<int>(effects.size()); ++i) {
         auto w = std::make_unique<PedalWidget>(effects[i], i);
         w->set_history(&history_);
         widgets_.push_back(std::move(w));
+    }
+    
+    // Restore visibility and add any new effects
+    update_visible_pedals();
+    for (int i = 0; i < static_cast<int>(effects.size()); ++i) {
+        const char* name = effects[i]->name();
+        bool is_amp = (std::strcmp(name, "Amp Sim") == 0);
+        bool was_visible = visible_names.count(name) > 0;
+        
+        // Always show amps, EQ, and Reverb
+        // Show other effects if they were visible before or if they're newly added
+        if (is_amp || std::strcmp(name, "Equalizer") == 0 || std::strcmp(name, "Reverb") == 0 || was_visible) {
+            visible_indices_.insert(i);
+        }
     }
 }
 
@@ -75,20 +115,15 @@ void PedalBoard::render() {
     }
     ImGui::SameLine();
 
-    ImGui::Checkbox("Active Only", &show_active_only_);
     ImGui::SameLine();
 
-    // Amp selector (separate from pedals)
+    // Amp selector (separate dropdown to switch model)
     render_amp_selector();
 
     ImGui::SameLine();
-    // Count visible pedals (exclude amps)
-    int pedal_count = 0;
-    for (auto& fx : engine_.effects()) {
-        if (std::strcmp(fx->name(), "Amp Sim") != 0) ++pedal_count;
-    }
+    int pedal_count = static_cast<int>(engine_.effects().size());
     ImGui::TextColored(Theme::TextSecondary(),
-        "  %d pedals | Drag knobs to adjust", pedal_count);
+        "  %d effects | Drag knobs to adjust", pedal_count);
 
     ImGui::EndChild();
 
@@ -113,10 +148,17 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Overdrive")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Overdrive>()));
             rebuild_widgets();
+            // Make the newly added pedal visible
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
         if (ImGui::MenuItem("Distortion")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Distortion>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
 
         ImGui::Separator();
@@ -124,10 +166,16 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Noise Gate")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<NoiseGate>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
         if (ImGui::MenuItem("Compressor")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Compressor>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
 
         ImGui::Separator();
@@ -135,6 +183,9 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Chorus")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Chorus>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
 
         ImGui::Separator();
@@ -142,10 +193,16 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Delay")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Delay>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
         if (ImGui::MenuItem("Reverb")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Reverb>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
 
         ImGui::Separator();
@@ -153,24 +210,39 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Equalizer")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<Equalizer>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
         if (ImGui::MenuItem("Cabinet Sim")) {
             history_.execute(std::make_unique<AddEffectCommand>(engine_, std::make_shared<CabinetSim>()));
             rebuild_widgets();
+            if (!engine_.effects().empty()) {
+                visible_indices_.insert(static_cast<int>(engine_.effects().size()) - 1);
+            }
         }
 
         ImGui::EndPopup();
     }
 }
 
-/** @brief Render the amp model selector dropdown (separate from pedals, max 1). */
+/** @brief Render the amp model selector dropdown (max 1 amp, always present). */
 void PedalBoard::render_amp_selector() {
     const auto& models = get_amp_models();
     int amp_idx = find_amp_index();
 
-    // Current selection label
-    const char* current_label = "No Amp";
-    int current_model = -1;
+    // Auto-add default amp if none exists
+    if (amp_idx < 0) {
+        auto amp = std::make_shared<AmpSimulator>();
+        amp->params()[0].value = 0.0f; // first model
+        engine_.add_effect(amp);
+        rebuild_widgets();
+        amp_idx = find_amp_index();
+    }
+
+    // Current model label
+    const char* current_label = "Amp";
+    int current_model = 0;
     if (amp_idx >= 0) {
         auto& amp_fx = engine_.effects()[amp_idx];
         current_model = static_cast<int>(amp_fx->params()[0].value);
@@ -190,28 +262,11 @@ void PedalBoard::render_amp_selector() {
 
     if (ImGui::BeginPopup("AmpSelectorPopup")) {
         ImGui::TextColored(ImVec4(0.95f, 0.55f, 0.20f, 1.0f), "AMP MODEL");
-
-        // "No Amp" option
-        if (ImGui::MenuItem("No Amp", nullptr, amp_idx < 0)) {
-            if (amp_idx >= 0) {
-                history_.execute(std::make_unique<RemoveEffectCommand>(engine_, amp_idx));
-                rebuild_widgets();
-            }
-        }
-
-        ImGui::Separator();
         for (int m = 0; m < static_cast<int>(models.size()); ++m) {
-            bool is_selected = (amp_idx >= 0 && current_model == m);
+            bool is_selected = (current_model == m);
             if (ImGui::MenuItem(models[m].name, models[m].inspiration, is_selected)) {
                 if (amp_idx >= 0) {
-                    // Update existing amp's model param
                     engine_.effects()[amp_idx]->params()[0].value = static_cast<float>(m);
-                } else {
-                    // Add new amp at the end of the chain
-                    auto amp = std::make_shared<AmpSimulator>();
-                    amp->params()[0].value = static_cast<float>(m);
-                    history_.execute(std::make_unique<AddEffectCommand>(engine_, amp));
-                    rebuild_widgets();
                 }
             }
         }
@@ -220,17 +275,14 @@ void PedalBoard::render_amp_selector() {
 }
 
 /** @brief Draw the signal flow line, render each pedal widget, and handle drag-and-drop reordering.
- *  Amps are excluded (rendered separately via the amp selector). */
+ *  Uses visibility set to determine which pedals to show. */
 void PedalBoard::render_signal_chain() {
-    // Build list of visible widget indices, excluding amps
+    // Build list of visible widget indices from visibility set
     std::vector<int> visible;
-    for (int i = 0; i < static_cast<int>(widgets_.size()); ++i) {
-        auto* fx = widgets_[i]->get_effect().get();
-        // Skip amp simulator effects (rendered separately)
-        if (std::strcmp(fx->name(), "Amp Sim") == 0) continue;
-        // Skip disabled effects when "Active Only" is on
-        if (show_active_only_ && !fx->is_enabled()) continue;
-        visible.push_back(i);
+    for (int idx : visible_indices_) {
+        if (idx >= 0 && idx < static_cast<int>(widgets_.size())) {
+            visible.push_back(idx);
+        }
     }
 
     if (visible.empty()) {
@@ -309,6 +361,7 @@ void PedalBoard::render_signal_chain() {
 
     // Handle removal
     if (remove_idx >= 0) {
+        visible_indices_.erase(remove_idx);
         history_.execute(std::make_unique<RemoveEffectCommand>(engine_, remove_idx));
         rebuild_widgets();
     }

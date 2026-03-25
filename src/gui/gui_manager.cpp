@@ -414,34 +414,6 @@ bool GuiManager::run_frame() {
 
     ImGui::Separator();
 
-    // Tuner button (opens modal)
-    {
-        bool tuner_active = show_tuner_;
-        if (tuner_active) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.45f, 0.5f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.15f, 0.55f, 0.6f, 1.0f));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.28f, 0.30f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.38f, 0.40f, 1.0f));
-        }
-        if (ImGui::Button(tuner_active ? "Tuner [ON]" : "Tuner", ImVec2(100, 28))) {
-            show_tuner_ = !show_tuner_;
-            if (show_tuner_) {
-                tuner_instance_->set_enabled(true);
-                engine_.set_tuner_tap(tuner_instance_);
-            } else {
-                engine_.clear_tuner_tap();
-                tuner_instance_->set_enabled(false);
-            }
-        }
-        ImGui::PopStyleColor(2);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Open chromatic tuner");
-        }
-    }
-
-    ImGui::Separator();
-
     float analyzer_reserved_h = analyzer_panel_expanded_ ? 245.0f : 38.0f;
     ImGui::BeginChild("PedalBoardRegion", ImVec2(0, -analyzer_reserved_h), false);
     if (pedal_board_) {
@@ -691,6 +663,19 @@ void GuiManager::render_menu_bar() {
             ImGui::Separator();
             if (ImGui::MenuItem("Restart Audio")) {
                 engine_.restart();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Utilities")) {
+            if (ImGui::MenuItem("Open Tuner", nullptr, show_tuner_)) {
+                show_tuner_ = !show_tuner_;
+                if (show_tuner_) {
+                    tuner_instance_->set_enabled(true);
+                    engine_.set_tuner_tap(tuner_instance_);
+                } else {
+                    engine_.clear_tuner_tap();
+                    tuner_instance_->set_enabled(false);
+                }
             }
             ImGui::EndMenu();
         }

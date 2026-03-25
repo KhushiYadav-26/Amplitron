@@ -3,6 +3,7 @@
 #include "gui/command.h"
 #include "gui/command_history.h"
 #include "audio/effects/tuner.h"
+#include "audio/effects/amp_simulator.h"
 #include <cstring>
 #include <cmath>
 
@@ -33,6 +34,9 @@ bool PedalWidget::render() {
     ImVec2 cursor = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    bool is_amp = (std::strcmp(effect_->name(), "Amp Sim") == 0);
+    bool enabled = effect_->is_enabled();
+
     // Pedal body
     ImVec2 p0 = cursor;
     ImVec2 p1 = ImVec2(cursor.x + pedal_width, cursor.y + pedal_height);
@@ -44,46 +48,124 @@ bool PedalWidget::render() {
         Theme::PEDAL_SHADOW, Theme::ROUNDING_MD
     );
 
-    // Body
-    ImU32 body_color = ImGui::ColorConvertFloat4ToU32(pedal_color_);
-    dl->AddRectFilled(p0, p1, body_color, Theme::ROUNDING_MD);
+    if (is_amp) {
+        // ========== AMP CABINET VISUAL ==========
+        // Dark cabinet body
+        ImU32 cab_body = IM_COL32(30, 22, 16, 255);     // dark walnut
+        ImU32 cab_border = IM_COL32(90, 70, 40, 255);   // gold-brown trim
+        ImU32 cab_grille = IM_COL32(18, 14, 10, 255);   // grille cloth
+        ImU32 cab_grille_line = IM_COL32(38, 30, 22, 180);
 
-    // Border
-    dl->AddRect(p0, p1, Theme::PEDAL_BORDER, Theme::ROUNDING_MD, 0, 2.0f);
+        dl->AddRectFilled(p0, p1, cab_body, Theme::ROUNDING_MD);
+        dl->AddRect(p0, p1, cab_border, Theme::ROUNDING_MD, 0, 2.5f);
 
-    // Metallic top plate
-    ImVec2 plate_p0 = ImVec2(p0.x + 8, p0.y + 8);
-    ImVec2 plate_p1 = ImVec2(p1.x - 8, p0.y + 45);
-    dl->AddRectFilled(plate_p0, plate_p1,
-        Theme::PEDAL_PLATE, Theme::ROUNDING_SM);
+        // Gold accent strip at top
+        dl->AddRectFilled(
+            ImVec2(p0.x + 6, p0.y + 6),
+            ImVec2(p1.x - 6, p0.y + 10),
+            Theme::ACCENT_GOLD_DIM, 2.0f);
 
-    // Effect name
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + 12, p0.y + 14));
-    ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextPrimary());
-    ImGui::Text("%s", effect_->name());
-    ImGui::PopStyleColor();
+        // Header plate (brushed metal look)
+        ImVec2 plate_p0 = ImVec2(p0.x + 8, p0.y + 14);
+        ImVec2 plate_p1 = ImVec2(p1.x - 8, p0.y + 50);
+        dl->AddRectFilled(plate_p0, plate_p1,
+            IM_COL32(46, 38, 28, 220), Theme::ROUNDING_SM);
+        dl->AddRect(plate_p0, plate_p1,
+            IM_COL32(70, 58, 38, 180), Theme::ROUNDING_SM, 0, 1.0f);
 
-    // LED indicator
-    float led_x = p0.x + pedal_width - 25;
-    float led_y = p0.y + 20;
-    bool enabled = effect_->is_enabled();
-    ImU32 led_col = enabled ?
-        ImGui::ColorConvertFloat4ToU32(led_color_) :
-        Theme::LED_OFF;
-    dl->AddCircleFilled(ImVec2(led_x, led_y), 6, led_col);
-    if (enabled) {
-        // Glow effect
-        dl->AddCircleFilled(ImVec2(led_x, led_y), 10,
-            IM_COL32(
-                static_cast<int>(led_color_.x * 255),
-                static_cast<int>(led_color_.y * 255),
-                static_cast<int>(led_color_.z * 255),
-                40
-            ));
+        // "AMP" label
+        ImGui::SetCursorScreenPos(ImVec2(p0.x + 12, p0.y + 18));
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Gold());
+        ImGui::Text("AMP");
+        ImGui::PopStyleColor();
+
+        // Model name
+        int model_idx = static_cast<int>(effect_->params()[0].value);
+        const auto& models = get_amp_models();
+        const char* model_name = "Unknown";
+        if (model_idx >= 0 && model_idx < static_cast<int>(models.size())) {
+            model_name = models[model_idx].name;
+        }
+        ImVec2 mn_size = ImGui::CalcTextSize(model_name);
+        float mn_x = p0.x + (pedal_width - mn_size.x) * 0.5f;
+        ImGui::SetCursorScreenPos(ImVec2(mn_x, p0.y + 33));
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextPrimary());
+        ImGui::Text("%s", model_name);
+        ImGui::PopStyleColor();
+
+        // LED indicator (power light)
+        float led_x = p1.x - 22;
+        float led_y = p0.y + 26;
+        dl->AddCircleFilled(ImVec2(led_x, led_y), 5, Theme::LED_GREEN);
+        dl->AddCircleFilled(ImVec2(led_x, led_y), 8, Theme::LED_GREEN_GLOW & 0x30FFFFFF);
+
+        // Speaker grille area (bottom portion of the amp)
+        float grille_top = p1.y - 100;
+        float grille_bottom = p1.y - 12;
+        float grille_left = p0.x + 12;
+        float grille_right = p1.x - 12;
+
+        // Grille background
+        dl->AddRectFilled(
+            ImVec2(grille_left, grille_top),
+            ImVec2(grille_right, grille_bottom),
+            cab_grille, Theme::ROUNDING_SM);
+        dl->AddRect(
+            ImVec2(grille_left, grille_top),
+            ImVec2(grille_right, grille_bottom),
+            IM_COL32(50, 40, 28, 180), Theme::ROUNDING_SM, 0, 1.0f);
+
+        // Grille cloth horizontal lines
+        for (float gy = grille_top + 6; gy < grille_bottom - 4; gy += 5.0f) {
+            dl->AddLine(
+                ImVec2(grille_left + 4, gy),
+                ImVec2(grille_right - 4, gy),
+                cab_grille_line, 1.0f);
+        }
+
+        // Gold accent strip at bottom
+        dl->AddRectFilled(
+            ImVec2(p0.x + 6, p1.y - 10),
+            ImVec2(p1.x - 6, p1.y - 6),
+            Theme::ACCENT_GOLD_DIM, 2.0f);
+    } else {
+        // ========== STANDARD PEDAL VISUAL ==========
+        ImU32 body_color = ImGui::ColorConvertFloat4ToU32(pedal_color_);
+        dl->AddRectFilled(p0, p1, body_color, Theme::ROUNDING_MD);
+        dl->AddRect(p0, p1, Theme::PEDAL_BORDER, Theme::ROUNDING_MD, 0, 2.0f);
+
+        // Metallic top plate
+        ImVec2 plate_p0 = ImVec2(p0.x + 8, p0.y + 8);
+        ImVec2 plate_p1 = ImVec2(p1.x - 8, p0.y + 45);
+        dl->AddRectFilled(plate_p0, plate_p1,
+            Theme::PEDAL_PLATE, Theme::ROUNDING_SM);
+
+        // Effect name
+        ImGui::SetCursorScreenPos(ImVec2(p0.x + 12, p0.y + 14));
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextPrimary());
+        ImGui::Text("%s", effect_->name());
+        ImGui::PopStyleColor();
+
+        // LED indicator
+        float led_x = p0.x + pedal_width - 25;
+        float led_y = p0.y + 20;
+        ImU32 led_col = enabled ?
+            ImGui::ColorConvertFloat4ToU32(led_color_) :
+            Theme::LED_OFF;
+        dl->AddCircleFilled(ImVec2(led_x, led_y), 6, led_col);
+        if (enabled) {
+            dl->AddCircleFilled(ImVec2(led_x, led_y), 10,
+                IM_COL32(
+                    static_cast<int>(led_color_.x * 255),
+                    static_cast<int>(led_color_.y * 255),
+                    static_cast<int>(led_color_.z * 255),
+                    40
+                ));
+        }
     }
 
     // --- Tuner custom display ---
-    bool is_tuner = (std::strcmp(effect_->name(), "Tuner") == 0);
+    bool is_tuner = !is_amp && (std::strcmp(effect_->name(), "Tuner") == 0);
     if (is_tuner) {
         auto* tuner = dynamic_cast<TunerPedal*>(effect_.get());
         if (tuner) {
@@ -209,9 +291,15 @@ bool PedalWidget::render() {
     }
 
     // Knobs area (skip for tuner — it has a custom display above)
+    // For amp, knobs start after the header; skip model selector param (index 0)
     float knob_y_start = p0.y + 55;
     auto& params = effect_->params();
     int num_params = is_tuner ? 0 : static_cast<int>(params.size());
+    int param_offset = 0;
+    if (is_amp) {
+        param_offset = 1; // skip model selector param
+        num_params = std::max(0, num_params - 1);
+    }
 
     float knob_radius = 20.0f;
     float knob_spacing_x = 85.0f;
@@ -225,6 +313,7 @@ bool PedalWidget::render() {
     constexpr float ARC_RANGE = 4.712f;   // 270° sweep clockwise
 
     for (int i = 0; i < num_params && i < 6; ++i) {
+        int pi = i + param_offset; // actual param index
         int col = i % 2;
         int row = i / 2;
         float kx = p0.x + 15 + col * knob_spacing_x;
@@ -233,7 +322,7 @@ bool PedalWidget::render() {
         ImVec2 knob_center = ImVec2(kx + knob_spacing_x * 0.5f, ky + knob_radius + 2);
 
         char label[64];
-        snprintf(label, sizeof(label), "##knob_%s_%d_%d", effect_->name(), index_, i);
+        snprintf(label, sizeof(label), "##knob_%s_%d_%d", effect_->name(), index_, pi);
 
         // Invisible interaction area centered on knob
         ImGui::SetCursorScreenPos(ImVec2(
@@ -245,12 +334,12 @@ bool PedalWidget::render() {
         bool is_active = ImGui::IsItemActive();
 
         // --- Interaction ---
-        float range = params[i].max_val - params[i].min_val;
+        float range = params[pi].max_val - params[pi].min_val;
 
         // Track drag start for undo coalescing
         if (is_active && !knob_was_active_) {
-            active_param_index_ = i;
-            param_value_before_drag_ = params[i].value;
+            active_param_index_ = pi;
+            param_value_before_drag_ = params[pi].value;
         }
 
         if (is_active) {
@@ -292,44 +381,44 @@ bool PedalWidget::render() {
                 if (ImGui::GetIO().KeyShift) value_delta *= 0.2f;
                 if (ImGui::GetIO().KeyCtrl)  value_delta *= 3.0f;
 
-                params[i].value = clamp(params[i].value + value_delta,
-                                        params[i].min_val, params[i].max_val);
+                params[pi].value = clamp(params[pi].value + value_delta,
+                                        params[pi].min_val, params[pi].max_val);
             }
         }
 
         // Commit param change when drag ends
-        if (knob_was_active_ && !is_active && active_param_index_ == i) {
-            float new_val = params[i].value;
+        if (knob_was_active_ && !is_active && active_param_index_ == pi) {
+            float new_val = params[pi].value;
             if (new_val != param_value_before_drag_) {
-                commit_param_change(i, param_value_before_drag_, new_val);
+                commit_param_change(pi, param_value_before_drag_, new_val);
             }
             active_param_index_ = -1;
             knob_was_active_ = false;
         }
 
         // Update active tracking for this knob
-        if (active_param_index_ == i) {
+        if (active_param_index_ == pi) {
             knob_was_active_ = is_active;
         }
 
         // Scroll wheel
         if (is_hovered && std::fabs(ImGui::GetIO().MouseWheel) > 0.0f) {
-            float old_val = params[i].value;
+            float old_val = params[pi].value;
             float step = range * 0.03f;
             if (ImGui::GetIO().KeyShift) step *= 0.2f;
-            params[i].value = clamp(params[i].value + ImGui::GetIO().MouseWheel * step,
-                                    params[i].min_val, params[i].max_val);
-            if (params[i].value != old_val) {
-                commit_param_change(i, old_val, params[i].value);
+            params[pi].value = clamp(params[pi].value + ImGui::GetIO().MouseWheel * step,
+                                    params[pi].min_val, params[pi].max_val);
+            if (params[pi].value != old_val) {
+                commit_param_change(pi, old_val, params[pi].value);
             }
         }
 
         // Double-click to reset
         if (is_hovered && ImGui::IsMouseDoubleClicked(0)) {
-            float old_val = params[i].value;
-            params[i].value = params[i].default_val;
-            if (params[i].value != old_val) {
-                commit_param_change(i, old_val, params[i].value);
+            float old_val = params[pi].value;
+            params[pi].value = params[pi].default_val;
+            if (params[pi].value != old_val) {
+                commit_param_change(pi, old_val, params[pi].value);
             }
         }
 
@@ -338,25 +427,25 @@ bool PedalWidget::render() {
             ImGui::OpenPopup(label);
         }
         if (ImGui::BeginPopup(label)) {
-            ImGui::Text("%s", params[i].name.c_str());
+            ImGui::Text("%s", params[pi].name.c_str());
             ImGui::SetNextItemWidth(120);
-            ImGui::SliderFloat("##edit", &params[i].value,
-                               params[i].min_val, params[i].max_val, "%.2f");
+            ImGui::SliderFloat("##edit", &params[pi].value,
+                               params[pi].min_val, params[pi].max_val, "%.2f");
             if (ImGui::IsItemActivated()) {
-                popup_active_param_index_ = i;
-                popup_param_value_before_edit_ = params[i].value;
+                popup_active_param_index_ = pi;
+                popup_param_value_before_edit_ = params[pi].value;
             }
-            if (ImGui::IsItemDeactivatedAfterEdit() && popup_active_param_index_ == i) {
-                if (params[i].value != popup_param_value_before_edit_) {
-                    commit_param_change(i, popup_param_value_before_edit_, params[i].value);
+            if (ImGui::IsItemDeactivatedAfterEdit() && popup_active_param_index_ == pi) {
+                if (params[pi].value != popup_param_value_before_edit_) {
+                    commit_param_change(pi, popup_param_value_before_edit_, params[pi].value);
                 }
                 popup_active_param_index_ = -1;
             }
             if (ImGui::Button("Reset")) {
-                float old_val = params[i].value;
-                params[i].value = params[i].default_val;
-                if (params[i].value != old_val) {
-                    commit_param_change(i, old_val, params[i].value);
+                float old_val = params[pi].value;
+                params[pi].value = params[pi].default_val;
+                if (params[pi].value != old_val) {
+                    commit_param_change(pi, old_val, params[pi].value);
                 }
                 ImGui::CloseCurrentPopup();
             }
@@ -364,7 +453,7 @@ bool PedalWidget::render() {
         }
 
         // --- Drawing ---
-        float normalized = (params[i].value - params[i].min_val) / range;
+        float normalized = (params[pi].value - params[pi].min_val) / range;
 
         // Outer ring / track (colored arc)
         float track_radius = knob_radius + 3;
@@ -415,11 +504,11 @@ bool PedalWidget::render() {
         // Tooltip
         if (is_hovered || is_active) {
             ImGui::SetTooltip("%s: %.2f %s\nRotate or drag to adjust\nScroll wheel also works\nShift=fine  Ctrl=coarse\nDbl-click=reset  Right-click=edit",
-                params[i].name.c_str(), params[i].value, params[i].unit.c_str());
+                params[pi].name.c_str(), params[pi].value, params[pi].unit.c_str());
         }
 
         // Parameter name below knob (centered)
-        const char* pname = params[i].name.c_str();
+        const char* pname = params[pi].name.c_str();
         ImVec2 text_size = ImGui::CalcTextSize(pname);
         ImGui::SetCursorScreenPos(ImVec2(
             knob_center.x - text_size.x * 0.5f,
@@ -430,7 +519,7 @@ bool PedalWidget::render() {
 
         // Value text above knob (centered)
         char val_buf[32];
-        snprintf(val_buf, sizeof(val_buf), "%.1f", params[i].value);
+        snprintf(val_buf, sizeof(val_buf), "%.1f", params[pi].value);
         ImVec2 val_size = ImGui::CalcTextSize(val_buf);
         ImGui::SetCursorScreenPos(ImVec2(
             knob_center.x - val_size.x * 0.5f,
@@ -444,36 +533,40 @@ bool PedalWidget::render() {
 
     // knob_was_active_ is updated per-knob inside the loop above
 
-    // Footswitch (toggle on/off)
-    float switch_y = p0.y + pedal_height - 55;
-    float switch_x = p0.x + (pedal_width - 50) / 2;
-    ImGui::SetCursorScreenPos(ImVec2(switch_x, switch_y));
+    // Footswitch (toggle on/off) — amps are always on, no footswitch
+    if (!is_amp) {
+        float switch_y = p0.y + pedal_height - 55;
+        float switch_x = p0.x + (pedal_width - 50) / 2;
+        ImGui::SetCursorScreenPos(ImVec2(switch_x, switch_y));
 
-    // Draw footswitch
-    ImVec2 sw_center = ImVec2(switch_x + 25, switch_y + 15);
-    dl->AddCircleFilled(sw_center, 18, Theme::SWITCH_BODY);
-    dl->AddCircle(sw_center, 18, Theme::SWITCH_RING, 0, 2.0f);
-    dl->AddCircleFilled(sw_center, 12,
-        enabled ? Theme::SWITCH_ACTIVE : Theme::SWITCH_IDLE);
+        // Draw footswitch
+        ImVec2 sw_center = ImVec2(switch_x + 25, switch_y + 15);
+        dl->AddCircleFilled(sw_center, 18, Theme::SWITCH_BODY);
+        dl->AddCircle(sw_center, 18, Theme::SWITCH_RING, 0, 2.0f);
+        dl->AddCircleFilled(sw_center, 12,
+            enabled ? Theme::SWITCH_ACTIVE : Theme::SWITCH_IDLE);
 
-    ImGui::InvisibleButton("##switch", ImVec2(50, 30));
-    if (ImGui::IsItemClicked()) {
-        effect_->set_enabled(!enabled);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(enabled ? "Click to bypass" : "Click to enable");
+        ImGui::InvisibleButton("##switch", ImVec2(50, 30));
+        if (ImGui::IsItemClicked()) {
+            effect_->set_enabled(!enabled);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(enabled ? "Click to bypass" : "Click to enable");
+        }
     }
 
-    // Remove button (small X at top-right)
-    ImGui::SetCursorScreenPos(ImVec2(p1.x - 22, p0.y + 2));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.1f, 0.1f, 0.8f));
-    char remove_label[32];
-    snprintf(remove_label, sizeof(remove_label), "X##rm%d", index_);
-    if (ImGui::SmallButton(remove_label)) {
-        should_remove = true;
+    // Remove button (small X at top-right) — not shown for amp
+    if (!is_amp) {
+        ImGui::SetCursorScreenPos(ImVec2(p1.x - 22, p0.y + 2));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.1f, 0.1f, 0.8f));
+        char remove_label[32];
+        snprintf(remove_label, sizeof(remove_label), "X##rm%d", index_);
+        if (ImGui::SmallButton(remove_label)) {
+            should_remove = true;
+        }
+        ImGui::PopStyleColor(2);
     }
-    ImGui::PopStyleColor(2);
 
     // Advance cursor for next pedal
     ImGui::SetCursorScreenPos(ImVec2(p0.x + pedal_width + 15, cursor.y));

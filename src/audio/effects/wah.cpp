@@ -1,6 +1,9 @@
 #include "audio/effects/wah.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<WahPedal> reg("Wah");
 
 WahPedal::WahPedal() {
     params_ = {
@@ -23,10 +26,10 @@ void WahPedal::process(float* buffer, int num_samples) {
     float atk_ms   = params_[4].value;
     float rel_ms   = params_[5].value;
 
-    float atk_coeff = std::exp(-1.0f / (sample_rate_ * atk_ms  * 0.001f));
-    float rel_coeff = std::exp(-1.0f / (sample_rate_ * rel_ms  * 0.001f));
+    float atk_coeff = EnvelopeFollower::time_to_coeff(atk_ms, sample_rate_);
+    float rel_coeff = EnvelopeFollower::time_to_coeff(rel_ms, sample_rate_);
 
-    // Sweep/Q smoothing (~5 ms time constant — removes zipper noise on knob moves)
+    // Sweep/Q smoothing (~5 ms time constant -- removes zipper noise on knob moves)
     float smooth_coeff = std::exp(-1.0f / (sample_rate_ * 0.005f));
 
     for (int i = 0; i < num_samples; ++i) {
@@ -36,12 +39,10 @@ void WahPedal::process(float* buffer, int num_samples) {
         float target_sweep;
         if (is_auto) {
             // Peak-tracking envelope follower
-            float abs_in = std::abs(dry);
-            float coeff  = (abs_in > envelope_) ? atk_coeff : rel_coeff;
-            envelope_    = coeff * envelope_ + (1.0f - coeff) * abs_in;
+            float envelope = env_.process(dry, atk_coeff, rel_coeff);
 
-            // Map envelope → sweep (sensitivity scales the detection range)
-            target_sweep = clamp(envelope_ * sens * 4.0f, 0.0f, 1.0f);
+            // Map envelope -> sweep (sensitivity scales the detection range)
+            target_sweep = clamp(envelope * sens * 4.0f, 0.0f, 1.0f);
         } else {
             target_sweep = sweep;
         }
@@ -53,13 +54,12 @@ void WahPedal::process(float* buffer, int num_samples) {
         // Damping factor for SVF (inverse of smoothed Q)
         float q_damp = 1.0f / q_smooth_;
 
-        // --- Map sweep 0→1 to centre frequency 350 Hz → 2500 Hz (exponential) ---
+        // --- Map sweep 0->1 to centre frequency 350 Hz -> 2500 Hz (exponential) ---
         constexpr float FREQ_LO = 350.0f;
         constexpr float FREQ_HI = 2500.0f;
         float fc = FREQ_LO * std::pow(FREQ_HI / FREQ_LO, sweep_smooth_);
 
         // --- Chamberlin state-variable filter ---
-        // f_coeff = 2 * sin(pi * fc / sr)  (exact drive coefficient for SVF)
         float f_coeff = 2.0f * std::sin(PI * fc / static_cast<float>(sample_rate_));
 
         float hp    = dry - q_damp * svf_bp_ - svf_lp_;
@@ -76,7 +76,7 @@ void WahPedal::process(float* buffer, int num_samples) {
 void WahPedal::reset() {
     svf_lp_      = 0.0f;
     svf_bp_      = 0.0f;
-    envelope_    = 0.0f;
+    env_.reset();
     sweep_smooth_ = 0.5f;
     q_smooth_    = 3.5f;
 }

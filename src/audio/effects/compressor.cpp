@@ -1,6 +1,9 @@
 #include "audio/effects/compressor.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<Compressor> reg("Compressor");
 
 Compressor::Compressor() {
     params_ = {
@@ -21,15 +24,13 @@ void Compressor::process(float* buffer, int num_samples) {
     float release_ms = params_[3].value;
     float makeup = db_to_linear(params_[4].value);
 
-    float attack_coeff = std::exp(-1.0f / (sample_rate_ * attack_ms * 0.001f));
-    float release_coeff = std::exp(-1.0f / (sample_rate_ * release_ms * 0.001f));
+    float attack_coeff = EnvelopeFollower::time_to_coeff(attack_ms, sample_rate_);
+    float release_coeff = EnvelopeFollower::time_to_coeff(release_ms, sample_rate_);
 
     for (int i = 0; i < num_samples; ++i) {
-        float abs_sample = std::fabs(buffer[i]);
-        float coeff = (abs_sample > envelope_) ? (1.0f - attack_coeff) : (1.0f - release_coeff);
-        envelope_ += coeff * (abs_sample - envelope_);
+        float envelope = env_.process_additive(buffer[i], attack_coeff, release_coeff);
 
-        float env_db = linear_to_db(envelope_);
+        float env_db = linear_to_db(envelope);
         float gain_db = 0.0f;
         if (env_db > threshold_db) {
             gain_db = (threshold_db - env_db) * (1.0f - 1.0f / ratio);
@@ -41,7 +42,7 @@ void Compressor::process(float* buffer, int num_samples) {
 }
 
 void Compressor::reset() {
-    envelope_ = 0.0f;
+    env_.reset();
 }
 
 } // namespace GuitarAmp

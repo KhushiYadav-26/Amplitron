@@ -1,6 +1,9 @@
 #include "audio/effects/equalizer.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<Equalizer> reg("Equalizer");
 
 Equalizer::Equalizer() {
     params_ = {
@@ -22,53 +25,6 @@ void Equalizer::set_sample_rate(int sample_rate) {
     recompute_coefficients_if_dirty();
 }
 
-void Equalizer::compute_low_shelf(float freq, float gain_db, float q) {
-    float A = std::pow(10.0f, gain_db / 40.0f);
-    float w0 = TWO_PI * freq / sample_rate_;
-    float cos_w0 = std::cos(w0);
-    float sin_w0 = std::sin(w0);
-    float alpha = sin_w0 / (2.0f * q);
-    float sqA = std::sqrt(A);
-
-    float a0 = (A + 1) + (A - 1) * cos_w0 + 2 * sqA * alpha;
-    low_shelf_.b0 = (A * ((A + 1) - (A - 1) * cos_w0 + 2 * sqA * alpha)) / a0;
-    low_shelf_.b1 = (2 * A * ((A - 1) - (A + 1) * cos_w0)) / a0;
-    low_shelf_.b2 = (A * ((A + 1) - (A - 1) * cos_w0 - 2 * sqA * alpha)) / a0;
-    low_shelf_.a1 = (-2 * ((A - 1) + (A + 1) * cos_w0)) / a0;
-    low_shelf_.a2 = ((A + 1) + (A - 1) * cos_w0 - 2 * sqA * alpha) / a0;
-}
-
-void Equalizer::compute_peaking(float freq, float gain_db, float q) {
-    float A = std::pow(10.0f, gain_db / 40.0f);
-    float w0 = TWO_PI * freq / sample_rate_;
-    float cos_w0 = std::cos(w0);
-    float sin_w0 = std::sin(w0);
-    float alpha = sin_w0 / (2.0f * q);
-
-    float a0 = 1 + alpha / A;
-    mid_peak_.b0 = (1 + alpha * A) / a0;
-    mid_peak_.b1 = (-2 * cos_w0) / a0;
-    mid_peak_.b2 = (1 - alpha * A) / a0;
-    mid_peak_.a1 = (-2 * cos_w0) / a0;
-    mid_peak_.a2 = (1 - alpha / A) / a0;
-}
-
-void Equalizer::compute_high_shelf(float freq, float gain_db, float q) {
-    float A = std::pow(10.0f, gain_db / 40.0f);
-    float w0 = TWO_PI * freq / sample_rate_;
-    float cos_w0 = std::cos(w0);
-    float sin_w0 = std::sin(w0);
-    float alpha = sin_w0 / (2.0f * q);
-    float sqA = std::sqrt(A);
-
-    float a0 = (A + 1) - (A - 1) * cos_w0 + 2 * sqA * alpha;
-    high_shelf_.b0 = (A * ((A + 1) + (A - 1) * cos_w0 + 2 * sqA * alpha)) / a0;
-    high_shelf_.b1 = (-2 * A * ((A - 1) + (A + 1) * cos_w0)) / a0;
-    high_shelf_.b2 = (A * ((A + 1) + (A - 1) * cos_w0 - 2 * sqA * alpha)) / a0;
-    high_shelf_.a1 = (2 * ((A - 1) - (A + 1) * cos_w0)) / a0;
-    high_shelf_.a2 = ((A + 1) - (A - 1) * cos_w0 - 2 * sqA * alpha) / a0;
-}
-
 void Equalizer::recompute_coefficients_if_dirty() {
     float bass = params_[0].value;
     float mid = params_[1].value;
@@ -77,9 +33,9 @@ void Equalizer::recompute_coefficients_if_dirty() {
 
     if (bass != cached_bass_ || mid != cached_mid_ ||
         treble != cached_treble_ || presence != cached_presence_) {
-        compute_low_shelf(200.0f, bass, 0.7f);
-        compute_peaking(800.0f, mid, 1.0f);
-        compute_high_shelf(3000.0f, treble, 0.7f);
+        low_shelf_.set_low_shelf(200.0f, bass, 0.7f, sample_rate_);
+        mid_peak_.set_peaking(800.0f, mid, 1.0f, sample_rate_);
+        high_shelf_.set_high_shelf(3000.0f, treble, 0.7f, sample_rate_);
         cached_bass_ = bass;
         cached_mid_ = mid;
         cached_treble_ = treble;

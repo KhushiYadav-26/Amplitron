@@ -1,6 +1,9 @@
 #include "audio/effects/distortion.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<Distortion> reg("Distortion");
 
 Distortion::Distortion() {
     params_ = {
@@ -26,15 +29,14 @@ void Distortion::process(float* buffer, int num_samples) {
         // Apply drive gain
         float x = buffer[i] * drive;
 
-        // Hard clipping with asymmetric waveshaping (Padé approximant, ~3× faster)
+        // Hard clipping with asymmetric waveshaping
         x = fast_tanh(x);
 
         // Additional harmonic content via soft clip
         x = soft_clip(x * 1.5f);
 
         // Tone filter (one-pole LP)
-        lp_state_ += lp_coeff * (x - lp_state_);
-        x = lp_state_;
+        x = tone_lp_.lp(x, lp_coeff);
 
         // Output level
         x *= level;
@@ -45,7 +47,7 @@ void Distortion::process(float* buffer, int num_samples) {
 }
 
 void Distortion::reset() {
-    lp_state_ = 0.0f;
+    tone_lp_.reset();
 }
 
 } // namespace GuitarAmp

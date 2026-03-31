@@ -111,6 +111,11 @@ set(APP_SOURCES
     src/audio/effects/tuner.cpp
     src/audio/effects/wah.cpp
     src/gui/gui_manager.cpp
+    src/gui/gui_settings.cpp
+    src/gui/gui_presets.cpp
+    src/gui/gui_recording.cpp
+    src/gui/gui_tuner.cpp
+    src/gui/gui_analyzer.cpp
     src/gui/spectrum_analyzer.cpp
     src/gui/pedal_board.cpp
     src/gui/pedal_widget.cpp

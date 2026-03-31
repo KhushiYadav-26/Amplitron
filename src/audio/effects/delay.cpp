@@ -1,6 +1,9 @@
 #include "audio/effects/delay.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<Delay> reg("Delay");
 
 Delay::Delay() {
     params_ = {
@@ -40,8 +43,7 @@ void Delay::process(float* buffer, int num_samples) {
         float delayed = delay_buffer_[read_pos];
 
         // Tone filter on feedback path
-        lp_state_ += lp_coeff * (delayed - lp_state_);
-        float filtered = lp_state_;
+        float filtered = tone_lp_.lp(delayed, lp_coeff);
 
         // Write to delay buffer: input + filtered feedback
         delay_buffer_[write_pos_] = buffer[i] + filtered * feedback;
@@ -56,7 +58,7 @@ void Delay::process(float* buffer, int num_samples) {
 void Delay::reset() {
     std::fill(delay_buffer_.begin(), delay_buffer_.end(), 0.0f);
     write_pos_ = 0;
-    lp_state_ = 0.0f;
+    tone_lp_.reset();
 }
 
 } // namespace GuitarAmp

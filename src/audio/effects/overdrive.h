@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/effect.h"
+#include "audio/dsp/biquad.h"
 
 namespace GuitarAmp {
 
@@ -14,8 +15,8 @@ public:
 
 private:
     std::vector<EffectParam> params_;
-    float lp_state_ = 0.0f;
-    float hp_state_ = 0.0f;
+    OnePole tone_lp_;
+    OnePole dc_block_;
 };
 
 } // namespace GuitarAmp

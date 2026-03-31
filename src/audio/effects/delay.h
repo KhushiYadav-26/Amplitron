@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/effect.h"
+#include "audio/dsp/biquad.h"
 
 namespace GuitarAmp {
 
@@ -18,7 +19,7 @@ private:
     std::vector<float> delay_buffer_;
     int write_pos_ = 0;
     int max_delay_samples_ = 0;
-    float lp_state_ = 0.0f;
+    OnePole tone_lp_;
 };
 
 } // namespace GuitarAmp

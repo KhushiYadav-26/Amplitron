@@ -1,6 +1,9 @@
 #include "audio/effects/overdrive.h"
+#include "audio/effect_factory.h"
 
 namespace GuitarAmp {
+
+static EffectRegistrar<Overdrive> reg("Overdrive");
 
 Overdrive::Overdrive() {
     params_ = {
@@ -18,7 +21,6 @@ void Overdrive::process(float* buffer, int num_samples) {
     float level = params_[2].value;
 
     float lp_coeff = 0.05f + tone * 0.9f;
-    float hp_coeff = 0.001f;
 
     for (int i = 0; i < num_samples; ++i) {
         float dry = buffer[i];
@@ -33,12 +35,10 @@ void Overdrive::process(float* buffer, int num_samples) {
         }
 
         // Tone: LP filter
-        lp_state_ += lp_coeff * (x - lp_state_);
-        x = lp_state_;
+        x = tone_lp_.lp(x, lp_coeff);
 
         // DC blocking HP filter
-        hp_state_ += hp_coeff * (x - hp_state_);
-        x -= hp_state_;
+        x = dc_block_.hp(x, 0.001f);
 
         x *= level;
         buffer[i] = dry * (1.0f - mix_) + x * mix_;
@@ -46,8 +46,8 @@ void Overdrive::process(float* buffer, int num_samples) {
 }
 
 void Overdrive::reset() {
-    lp_state_ = 0.0f;
-    hp_state_ = 0.0f;
+    tone_lp_.reset();
+    dc_block_.reset();
 }
 
 } // namespace GuitarAmp

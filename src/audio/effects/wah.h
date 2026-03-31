@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/effect.h"
+#include "audio/dsp/envelope_follower.h"
 
 namespace GuitarAmp {
 
@@ -20,7 +21,7 @@ private:
     float svf_bp_ = 0.0f;
 
     // Envelope follower state (auto-wah)
-    float envelope_ = 0.0f;
+    EnvelopeFollower env_;
 
     // Smoothed sweep position (avoids zipper noise)
     float sweep_smooth_ = 0.5f;

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(Amplitron VERSION 1.0.0 LANGUAGES CXX C)
+include(GNUInstallDirs)
 
 set(AMPLITRON_VERSION "0.0.0" CACHE STRING "Application version (set by CI)")
 
@@ -311,7 +312,7 @@ else() # NOT EMSCRIPTEN
 
     # Install
     install(TARGETS Amplitron RUNTIME DESTINATION bin)
-    install(DIRECTORY presets DESTINATION bin)
+    install(DIRECTORY presets DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/amplitron)
     install(DIRECTORY assets/fonts DESTINATION bin/assets)
 
 endif() # EMSCRIPTEN

@@ -5,7 +5,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace GuitarAmp {
+namespace Amplitron {
 
 struct PresetData {
     std::string name;
@@ -38,8 +38,20 @@ public:
     static bool load_preset(const std::string& filepath,
                             AudioEngine& engine);
 
-    // Get the default presets directory (creates if needed)
+    // Get the active presets directory (creates if needed).
+    // Priority: custom user dir → system default dir → local "presets" fallback.
     static std::string get_presets_dir();
+
+    // Override the presets directory with a user-selected path.
+    // Pass empty string to revert to auto-detection.
+    static void set_presets_dir(const std::string& dir);
+
+    // Return the currently configured custom directory (empty = auto).
+    static const std::string& custom_presets_dir() { return custom_presets_dir_; }
+
+    // Persist / restore the custom directory to a config file.
+    static void save_config();
+    static void load_config();
 
     // List available preset files in the presets directory
     static std::vector<std::string> list_presets();
@@ -49,6 +61,13 @@ public:
 
 private:
     static std::string last_error_;
+    static std::string custom_presets_dir_;
+
+    // Return platform config file path (e.g. ~/.config/amplitron/config.json)
+    static std::string get_config_path();
+
+    // Return platform system-wide presets path (e.g. /usr/share/amplitron/presets)
+    static std::string get_system_presets_dir();
 
     // Minimal JSON helpers (no external dependency)
     static std::string to_json(const PresetData& preset);
@@ -59,4 +78,4 @@ private:
     static std::string unescape_json_string(const std::string& s);
 };
 
-} // namespace GuitarAmp
+} // namespace Amplitron

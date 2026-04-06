@@ -4,30 +4,174 @@
 #include <iostream>
 #include <ctime>
 #include <sys/stat.h>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
 
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
 #define MKDIR(path) _mkdir(path)
+#define STAT_STRUCT struct _stat
+#define STAT_FN     _stat
 #else
 #include <dirent.h>
 #define MKDIR(path) mkdir(path, 0755)
+#define STAT_STRUCT struct stat
+#define STAT_FN     stat
 #endif
 
-namespace GuitarAmp {
+namespace Amplitron {
 
 std::string PresetManager::last_error_;
+std::string PresetManager::custom_presets_dir_;
+
+static bool dir_exists(const std::string& path) {
+    STAT_STRUCT st;
+    return STAT_FN(path.c_str(), &st) == 0 &&
+#ifdef _WIN32
+           (st.st_mode & _S_IFDIR);
+#else
+           S_ISDIR(st.st_mode);
+#endif
+}
+
+std::string PresetManager::get_system_presets_dir() {
+#ifdef _WIN32
+    const char* pd = std::getenv("ProgramData");
+    return pd ? std::string(pd) + "\\Amplitron\\presets" : "";
+#elif defined(__APPLE__)
+    return "/Library/Application Support/Amplitron/presets";
+#else
+    return "/usr/share/amplitron/presets";
+#endif
+}
+
+std::string PresetManager::get_config_path() {
+#ifdef _WIN32
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata) return "amplitron_config.json";
+    std::string dir = std::string(appdata) + "\\Amplitron";
+    MKDIR(dir.c_str());
+    return dir + "\\config.json";
+#else
+    const char* home = std::getenv("HOME");
+    if (!home) return "amplitron_config.json";
+    std::string config_dir = std::string(home) + "/.config/amplitron";
+    std::filesystem::create_directories(config_dir);
+    return config_dir + "/config.json";
+#endif
+}
+
+static std::string get_user_presets_dir() {
+#ifdef _WIN32
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata) return "";
+    return std::string(appdata) + "\\Amplitron\\presets";
+#elif defined(__APPLE__)
+    const char* home = std::getenv("HOME");
+    if (!home) return "";
+    return std::string(home) + "/Library/Application Support/Amplitron/presets";
+#else
+    const char* home = std::getenv("HOME");
+    if (!home) return "";
+    return std::string(home) + "/.config/amplitron/presets";
+#endif
+}
+
+void PresetManager::set_presets_dir(const std::string& dir) {
+    if (dir.empty()) {
+        custom_presets_dir_ = "";
+        return;
+    }
+    MKDIR(dir.c_str());
+    if (dir_exists(dir)) {
+        custom_presets_dir_ = dir;
+    }
+    // If creation/validation fails, custom_presets_dir_ is left unchanged.
+}
+
+void PresetManager::save_config() {
+    std::string path = get_config_path();
+    std::ofstream f(path);
+    if (!f.is_open()) return;
+    f << "{\n";
+    f << "  \"presets_dir\": \"";
+    // Escape backslashes for JSON (important on Windows)
+    for (char c : custom_presets_dir_) {
+        if (c == '\\') f << "\\\\";
+        else if (c == '"') f << "\\\"";
+        else f << c;
+    }
+    f << "\"\n}\n";
+}
+
+void PresetManager::load_config() {
+    std::string path = get_config_path();
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+
+    // Extract presets_dir value from minimal JSON
+    const std::string key = "\"presets_dir\"";
+    size_t key_pos = content.find(key);
+    if (key_pos == std::string::npos) return;
+
+    size_t colon = content.find(':', key_pos + key.size());
+    if (colon == std::string::npos) return;
+
+    size_t quote_open = content.find('"', colon + 1);
+    if (quote_open == std::string::npos) return;
+
+    std::string value;
+    size_t i = quote_open + 1;
+    while (i < content.size() && content[i] != '"') {
+        if (content[i] == '\\' && i + 1 < content.size()) {
+            ++i;
+            if (content[i] == '\\') value += '\\';
+            else if (content[i] == '"') value += '"';
+            else if (content[i] == 'n') value += '\n';
+            else { value += '\\'; value += content[i]; }
+        } else {
+            value += content[i];
+        }
+        ++i;
+    }
+
+    if (!value.empty() && dir_exists(value)) {
+        custom_presets_dir_ = value;
+    }
+}
 
 std::string PresetManager::get_presets_dir() {
+    // 1. User-selected custom directory — verify it still exists.
+    if (!custom_presets_dir_.empty()) {
+        MKDIR(custom_presets_dir_.c_str());
+        if (dir_exists(custom_presets_dir_)) {
+            return custom_presets_dir_;
+        }
+        // Stale path — fall through to the default user dir.
+    }
+
+    // 2. User-writable default presets directory (creates intermediate parents).
+    std::string user_dir = get_user_presets_dir();
+    if (!user_dir.empty()) {
+        std::filesystem::create_directories(user_dir);
+        if (dir_exists(user_dir)) {
+            return user_dir;
+        }
+    }
+
+    // 3. Local fallback
     std::string dir = "presets";
     MKDIR(dir.c_str());
     return dir;
 }
 
-std::vector<std::string> PresetManager::list_presets() {
-    std::vector<std::string> result;
-    std::string dir = get_presets_dir();
-
+static void append_json_files(const std::string& dir,
+                              std::vector<std::string>& result) {
 #ifdef _WIN32
     std::string pattern = dir + "\\*.json";
     struct _finddata_t fd;
@@ -53,6 +197,20 @@ std::vector<std::string> PresetManager::list_presets() {
         closedir(d);
     }
 #endif
+}
+
+std::vector<std::string> PresetManager::list_presets() {
+    std::vector<std::string> result;
+
+    // User / custom presets (writable)
+    append_json_files(get_presets_dir(), result);
+
+    // System presets (read-only source — listed for display but not for saves)
+    std::string sys_dir = get_system_presets_dir();
+    std::string user_dir = get_presets_dir();
+    if (!sys_dir.empty() && dir_exists(sys_dir) && sys_dir != user_dir) {
+        append_json_files(sys_dir, result);
+    }
 
     return result;
 }
@@ -361,4 +519,4 @@ bool PresetManager::load_preset(const std::string& filepath,
     return true;
 }
 
-} // namespace GuitarAmp
+} // namespace Amplitron

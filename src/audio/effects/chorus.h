@@ -2,12 +2,13 @@
 
 #include "audio/effect.h"
 
-namespace GuitarAmp {
+namespace Amplitron {
 
 class Chorus : public Effect {
 public:
     Chorus();
     void process(float* buffer, int num_samples) override;
+    void process_stereo(float* left, float* right, int num_samples) override;
     void set_sample_rate(int sample_rate) override;
     void reset() override;
     const char* name() const override { return "Chorus"; }
@@ -21,4 +22,4 @@ private:
     int max_delay_samples_ = 0;
 };
 
-} // namespace GuitarAmp
+} // namespace Amplitron

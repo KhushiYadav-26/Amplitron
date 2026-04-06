@@ -1,6 +1,8 @@
 #!/bin/bash
 # Linux Release Packaging Script
 
+set -e  # Exit on any error
+
 VERSION=${1:-dev}
 
 echo "Packaging Amplitron for Linux..."
@@ -10,7 +12,7 @@ RELEASE_DIR="release/Amplitron-Linux"
 mkdir -p "$RELEASE_DIR"
 
 # Copy executable
-cp build/guitar-amp "$RELEASE_DIR/amplitron"
+cp build/amplitron "$RELEASE_DIR/amplitron"
 chmod +x "$RELEASE_DIR/amplitron"
 
 # Copy documentation

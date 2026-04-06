@@ -9,18 +9,22 @@
 #include "audio/effects/distortion.h"
 #include "audio/effects/equalizer.h"
 #include "audio/effects/chorus.h"
+#include "audio/effects/phaser.h"
+#include "audio/effects/flanger.h"
 #include "audio/effects/delay.h"
 #include "audio/effects/reverb.h"
 #include "audio/effects/cabinet_sim.h"
 #include "audio/effects/amp_simulator.h"
 #include "audio/effects/wah.h"
+#include "audio/effects/octaver.h"
+#include "audio/effects/pitch_shifter.h"
 #include <cstring>
 #include <cstdio>
 #include <set>
 
 #include <imgui.h>
 
-namespace GuitarAmp {
+namespace Amplitron {
 
 /** @brief Construct PedalBoard and build initial widget list from engine state. */
 PedalBoard::PedalBoard(AudioEngine& engine, CommandHistory& history)
@@ -171,6 +175,12 @@ void PedalBoard::render_add_pedal_menu() {
         if (ImGui::MenuItem("Chorus")) {
             add_effect_and_show(std::make_shared<Chorus>());
         }
+        if (ImGui::MenuItem("Phaser")) {
+            add_effect_and_show(std::make_shared<Phaser>());
+        }
+        if (ImGui::MenuItem("Flanger")) {
+            add_effect_and_show(std::make_shared<Flanger>());
+        }
 
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.65f, 0.35f, 0.95f, 1.0f), "TIME");
@@ -185,6 +195,15 @@ void PedalBoard::render_add_pedal_menu() {
         ImGui::TextColored(ImVec4(0.30f, 0.75f, 0.60f, 1.0f), "FILTER");
         if (ImGui::MenuItem("Wah")) {
             add_effect_and_show(std::make_shared<WahPedal>());
+        }
+
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.85f, 0.40f, 0.55f, 1.0f), "PITCH");
+        if (ImGui::MenuItem("Octaver")) {
+            add_effect_and_show(std::make_shared<Octaver>());
+        }
+        if (ImGui::MenuItem("Pitch Shifter")) {
+            add_effect_and_show(std::make_shared<PitchShifter>());
         }
 
         ImGui::Separator();
@@ -351,4 +370,4 @@ void PedalBoard::render_signal_chain() {
     ImGui::Dummy(ImVec2(total_width + 20, 340));
 }
 
-} // namespace GuitarAmp
+} // namespace Amplitron

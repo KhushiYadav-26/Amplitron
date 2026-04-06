@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <type_traits>
 
-namespace GuitarAmp {
+namespace Amplitron {
 
 // Lock-free Single-Producer Single-Consumer ring buffer.
 // Producer: GUI thread pushes parameter changes.
@@ -44,6 +44,17 @@ public:
         return true;
     }
 
+    // Inspect the front item without consuming it (consumer thread only).
+    // Returns false if the queue is empty.
+    bool try_peek(T& item) const {
+        const size_t t = tail_.load(std::memory_order_relaxed);
+        if (t == head_.load(std::memory_order_acquire)) {
+            return false;  // empty
+        }
+        item = buf_[t];
+        return true;
+    }
+
 private:
     static constexpr size_t kMask = Capacity - 1;
 
@@ -72,4 +83,4 @@ struct AudioCommand {
     float value;          // The new value
 };
 
-} // namespace GuitarAmp
+} // namespace Amplitron

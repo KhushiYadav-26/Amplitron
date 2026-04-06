@@ -74,8 +74,14 @@ Each effect pedal in Amplitron acts as an independent DSP processing agent. They
 
 ### 2.5 Modulation & Filter Agents
 * **`WahPedal` (The Wah Agent):** A state-variable filter (Chamberlin SVF topology) wah effect with two operating modes. In **Manual** mode, the `Sweep` parameter controls the filter's centre frequency directly (heel-down = low, toe-down = high). In **Auto-wah** mode, an internal envelope follower tracks input amplitude and drives the sweep automatically according to `Sensitivity`, `Attack`, and `Release` parameters. One-pole smoothing is applied to both the sweep position and Q value to eliminate zipper noise on rapid knob moves. Uses `try_lock` for non-blocking parameter snapshots in the audio thread.
+* **`Phaser` (The Sweep Agent):** Cascaded 1st-order all-pass filters (4, 6, 8, or 12 stages) modulated by an LFO. Blends the all-pass output with the dry signal to create classic phaser sweep effects. Supports stereo operation with 180° out-of-phase LFO modulation on the right channel for a wide, spatial sweep.
+* **`Flanger` (The Comb Filter Agent):** Short modulated delay line (0.1–15ms) mixed with the dry signal. An LFO sweeps the delay time, and feedback through the delay line creates the characteristic comb filter sweep sound. Stereo operation uses 180° out-of-phase LFO for wide stereo flanging.
 
-### 2.6 Utility Agents
+### 2.6 Pitch & Octave Shift Agents
+* **`Octaver` (The Frequency Divider Agent):** Monophonic octave generator producing sub-octave (Oct-1) and upper-octave (Oct+1) signals blended with the dry input. Oct-1 uses a zero-crossing flip-flop divider producing a square wave at half the input frequency, shaped by the input envelope for warm, organ-like tones. Oct+1 uses full-wave rectification (|x|) to double the fundamental frequency, followed by DC removal and envelope shaping. References: Boss OC-2, EHX Octave Multiplexer.
+* **`PitchShifter` (The Granular Agent):** Pitch shifting by ±12 semitones using a dual-tap granular overlap-add algorithm. Two read pointers scan a circular buffer at rates determined by the pitch ratio, with a raised-cosine (Hann) window crossfade between the two taps to hide grain boundary discontinuities. Controls include Shift (semitones), Fine (cents), and Mix.
+
+### 2.7 Utility Agents
 * **`TunerPedal` (The Pitch Detection Agent):** A chromatic tuner using the YIN pitch detection algorithm. Operates on a 4096-sample circular buffer (~85ms window at 48kHz), providing accurate fundamental frequency detection down to E2 (82.41Hz). Reports detected note name, octave, cent offset, and signal presence via atomic variables for thread-safe GUI display. Updates at ~15Hz to balance responsiveness and CPU usage.
 
 ---
@@ -84,9 +90,49 @@ Each effect pedal in Amplitron acts as an independent DSP processing agent. They
 
 Because the UI Agent and the DSP Agents operate on entirely different threads (with vastly different priority levels), they must communicate carefully to avoid "Dropouts" (audio clicking/stuttering).
 
-* **The `try_lock` Paradigm:** When the UI Agent attempts to modify a DSP Agent's state (e.g., turning a knob), the Audio Engine uses a non-blocking `try_lock` on the data mutex. If the UI is currently writing, the Audio Engine simply processes the buffer using the *previous* state rather than waiting. 
+* **The `try_lock` + Shadow-Chain Paradigm:** The Audio Engine maintains an audio-thread-private shadow copy of the effect chain (`audio_shadow_effects_` / `audio_shadow_tuner_`). Each callback it attempts a non-blocking `try_lock` on `effect_mutex_`. If acquired it drains the SPSC command queue (applying pending parameter updates) and refreshes the shadow from `effects_`. If contended (GUI is mid-structural-mutation), it falls through and processes with the previous shadow — at most one callback behind, which is imperceptible. This eliminates the dry-pass glitch that previously occurred when skipping effect processing entirely on a failed `try_lock`.
 * **Parameter Smoothing:** DSP Agents utilize one-pole filters internally on their parameter inputs. If the UI Agent jumps a parameter from `0.1` to `0.9` instantly, the DSP Agent interpolates the value over several samples to prevent audible "zipper" noise or clicking.
 
 ---
+
+## 4. Testing Protocol
+
+At the end of any coding task (new feature, bug fix, refactor), run the full test suite before considering the task complete.
+
+```bash
+cmake --build build --target amplitron-tests && ./build/amplitron-tests
+```
+
+* All tests must pass (0 failed) before the task is done.
+* If tests fail, fix the root cause — do not skip or comment out tests.
+* If you add a new DSP effect or system agent, add corresponding tests in `tests/`.
+
+---
+
+## Updating `claude.md`
+
+At the end of any task that meaningfully changes the system architecture, update this file to keep it accurate. Follow these rules:
+
+### When to update
+- A new DSP effect agent is added or removed — update Section 2 and the agent count in the footer.
+- A system-level agent (`audio_engine`, `gui_manager`, `pedal_board`, etc.) has its responsibilities materially changed — update its entry in Section 1.
+- A new inter-thread communication pattern or concurrency mechanism is introduced — update Section 3.
+- The sample rate range, buffer size range, or safety clamping behaviour changes — update Section 1.1.
+- Do **not** update for purely internal refactors (renames, code style changes) that leave the observable architecture unchanged.
+
+### What to update
+- **Agent descriptions:** Keep the one-line role and bullet responsibilities accurate. Do not pad with implementation details that belong in code comments.
+- **Footer agent counts:** The line showing DSP effects and system agents must reflect the actual current counts after every structural addition or removal.
+- **Section headings:** If a new category of DSP agent is introduced (e.g. a new subsection under Section 2), add it with the same format as existing subsections.
+
+### How to update
+1. Read the current `CLAUDE.md` fully before editing.
+2. Make the minimal accurate change — do not rewrite sections that are still correct.
+3. Keep the agent description style consistent: bold name, parenthetical role label, then brief prose + bullet responsibilities.
+4. Do not add implementation details (algorithm internals, variable names) unless they are architecturally significant (e.g. the YIN algorithm in TunerPedal is worth naming; an internal loop counter is not).
+
+
+---
 **Maintained by:** [@sudip-mondal-2002](https://github.com/sudip-mondal-2002)
-**Architecture Reference** — 12 DSP effects, 7 system agents
+**Architecture Reference** — 16 DSP effects, 7 system agents
+

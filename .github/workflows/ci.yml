@@ -480,27 +480,23 @@ jobs:
 
     - name: Build (iOS Simulator, no codesign)
       run: |
+        set -o pipefail
         xcodebuild \
           -project build-ios/Amplitron.xcodeproj \
           -scheme Amplitron \
           -configuration Release \
-          -destination "generic/platform=iOS Simulator" \
+          -sdk iphonesimulator \
+          -derivedDataPath ios-derived \
+          ONLY_ACTIVE_ARCH=NO \
           CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-          build 2>&1 | xcpretty --color || \
-        xcodebuild \
-          -project build-ios/Amplitron.xcodeproj \
-          -scheme Amplitron \
-          -configuration Release \
-          -destination "generic/platform=iOS Simulator" \
-          CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-          build
+          build | xcpretty --color
 
     - name: Validate .app bundle
       run: |
-        APP=$(find build-ios -name "Amplitron.app" -type d | head -1)
+        APP=$(find ios-derived/Build/Products -name "Amplitron.app" -type d | head -1)
         echo "App bundle: $APP"
 
-        # Binary must exist and be a Mach-O fat binary (arm64 + x86_64 simulator slices)
+        # Binary must exist and be a valid Mach-O (arm64 or x86_64 simulator slice)
         BINARY="$APP/Amplitron"
         file "$BINARY"
         lipo -info "$BINARY" | grep -E "arm64|x86_64" \
@@ -514,17 +510,19 @@ jobs:
 
         echo ".app validation passed."
 
-    - name: Collect .app bundle
+    - name: Package .ipa
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        APP=$(find build-ios -name "Amplitron.app" -type d | head -1)
-        mkdir -p ios-staging
-        cp -R "$APP" ios-staging/
+        APP=$(find ios-derived/Build/Products -name "Amplitron.app" -type d | head -1)
+        mkdir -p ios-staging/Payload
+        cp -R "$APP" ios-staging/Payload/
+        cd ios-staging && zip -r Amplitron.ipa Payload/
+        ls -la ios-staging/
 
     - name: Upload iOS App
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       uses: actions/upload-artifact@v7
       with:
         name: ios-build
-        path: ios-staging/
+        path: ios-staging/Amplitron.ipa
         retention-days: 1

@@ -14,6 +14,12 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
+#if defined(__APPLE__)
+#  include <TargetConditionals.h>
+#endif
+#if defined(EMSCRIPTEN) || (defined(__APPLE__) && TARGET_OS_IOS)
+#  define AMPLITRON_NO_DESKTOP_SHELL 1
+#endif
 
 #pragma GCC diagnostic push
 #if defined(__GNUC__) && !defined(__clang__)
@@ -172,7 +178,7 @@ bool GuiManager::initialize(int width, int height) {
 
     PresetManager::load_config();
 
-#ifndef EMSCRIPTEN
+#ifndef AMPLITRON_NO_DESKTOP_SHELL
     update_check_thread_ = std::thread([this]() { this->check_for_updates(); });
 #endif
 
@@ -446,7 +452,7 @@ void GuiManager::render_menu_bar() {
 #if defined(_WIN32)
                 std::string cmd = "start " + update_url;
                 std::system(cmd.c_str());
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) && !TARGET_OS_IOS
                 std::string cmd = "open " + update_url;
                 std::system(cmd.c_str());
 #elif defined(__linux__)
@@ -547,7 +553,7 @@ void GuiManager::render_master_controls() {
 }
 
 void GuiManager::check_for_updates() {
-#ifndef EMSCRIPTEN
+#ifndef AMPLITRON_NO_DESKTOP_SHELL
     FILE* pipe = nullptr;
 #ifdef _WIN32
     pipe = _popen("curl -s https://api.github.com/repos/sudip-mondal-2002/Amplitron/releases", "r");

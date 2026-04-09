@@ -113,6 +113,8 @@ jobs:
           -DPORTAUDIO_LIBRARIES="$HOMEBREW_PREFIX/lib/libportaudio.dylib" \
           -DSDL2_INCLUDE_DIRS="$HOMEBREW_PREFIX/include/SDL2" \
           -DSDL2_LIBRARIES="$HOMEBREW_PREFIX/lib/libSDL2.dylib" \
+          -DRTMIDI_INCLUDE_DIRS="$HOMEBREW_PREFIX/include" \
+          -DRTMIDI_LIBRARIES="$HOMEBREW_PREFIX/lib/librtmidi.dylib" \
           ..
         make -j$(sysctl -n hw.ncpu)
 
@@ -387,6 +389,7 @@ jobs:
           cp /mingw64/bin/$dll staging/ 2>/dev/null || true
         done
         cp /mingw64/bin/libportaudio*.dll staging/ 2>/dev/null || true
+        cp /mingw64/bin/librtmidi*.dll staging/ 2>/dev/null || true
         ls -la staging/
 
     - name: Upload Build

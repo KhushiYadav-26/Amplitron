@@ -76,18 +76,28 @@ if(NOT SDL2_FOUND)
 endif()
 
 # RtMidi (MIDI input)
-if(PkgConfig_FOUND)
-    pkg_check_modules(RTMIDI rtmidi)
+# Skip auto-detection when paths are provided explicitly (e.g. CI -D flags).
+if(NOT RTMIDI_LIBRARIES)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(RTMIDI rtmidi)
+    endif()
+    if(NOT RTMIDI_FOUND)
+        find_path(RTMIDI_INCLUDE_DIRS rtmidi/RtMidi.h
+            PATHS /usr/include /usr/local/include /opt/homebrew/include
+                  "C:/Program Files/rtmidi/include"
+                  "${CMAKE_SOURCE_DIR}/external/rtmidi")
+        find_library(RTMIDI_LIBRARIES NAMES rtmidi
+            PATHS /usr/lib /usr/local/lib /opt/homebrew/lib
+                  "C:/Program Files/rtmidi/lib"
+                  "${CMAKE_SOURCE_DIR}/external/rtmidi")
+    endif()
 endif()
-if(NOT RTMIDI_FOUND)
-    find_path(RTMIDI_INCLUDE_DIRS rtmidi/RtMidi.h
-        PATHS /usr/include /usr/local/include /opt/homebrew/include
-              "C:/Program Files/rtmidi/include"
-              "${CMAKE_SOURCE_DIR}/external/rtmidi")
-    find_library(RTMIDI_LIBRARIES NAMES rtmidi
-        PATHS /usr/lib /usr/local/lib /opt/homebrew/lib
-              "C:/Program Files/rtmidi/lib"
-              "${CMAKE_SOURCE_DIR}/external/rtmidi")
+# pkg_check_modules sets RTMIDI_LIBRARIES to just the name ("rtmidi") and
+# RTMIDI_LIBRARY_DIRS to the directory (/opt/homebrew/lib).  Without
+# link_directories the linker never searches that path, so we add it
+# explicitly.  This is a no-op when RTMIDI_LIBRARIES is a full path.
+if(RTMIDI_LIBRARY_DIRS)
+    link_directories(${RTMIDI_LIBRARY_DIRS})
 endif()
 
 # OpenGL

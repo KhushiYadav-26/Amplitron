@@ -120,6 +120,40 @@ cmake --build build --target amplitron-tests && ./build/amplitron-tests
 
 ---
 
+## Adding New External Libraries
+
+When a new system library dependency is added (e.g. via `brew install` / `apt-get` / MSYS2 pacboy), **all three CI platform jobs must be updated in `.github/workflows/ci.yml`**. Failing to do so causes linker errors only on the CI runner, even if the local build works.
+
+### Checklist for every new external library
+
+1. **Linux** (`test-linux` job): add the package to the `apt-get install` line (e.g. `librtmidi-dev`).
+2. **macOS** (`test-macos` job):
+   - Add the package to the `brew install` line.
+   - Add explicit `-DFOO_INCLUDE_DIRS` and `-DFOO_LIBRARIES` flags to the `cmake` invocation in the Build step, using `$HOMEBREW_PREFIX` paths. This is required because `pkg_check_modules` on macOS sets the library name only (`LIBRARIES=foo`) without adding the Homebrew lib directory to the linker search path. PortAudio and SDL2 use this same pattern as reference.
+3. **Windows** (`test-windows` job): add `foo:p` to the `pacboy` package list. If the library ships a DLL, also copy `libfoo*.dll` in the `Collect Binaries` step.
+
+### CMakeLists.txt pattern for new external libraries
+
+```cmake
+# Foo library
+if(NOT FOO_LIBRARIES)          # allow CI to override via -D flags
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FOO foo)
+    endif()
+    if(NOT FOO_FOUND)
+        find_path(FOO_INCLUDE_DIRS foo/Foo.h PATHS ...)
+        find_library(FOO_LIBRARIES NAMES foo PATHS ...)
+    endif()
+endif()
+if(FOO_LIBRARY_DIRS)           # add search dir when pkg-config resolved the name
+    link_directories(${FOO_LIBRARY_DIRS})
+endif()
+```
+
+Then add `${FOO_INCLUDE_DIRS}` to `target_include_directories` and `${FOO_LIBRARIES}` to `target_link_libraries` for both `Amplitron` and `amplitron-tests`.
+
+---
+
 ## Updating `CLAUDE.md`
 
 At the end of any task that meaningfully changes the system architecture, update this file to keep it accurate. Follow these rules:

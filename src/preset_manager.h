@@ -75,13 +75,7 @@ private:
     // Return platform system-wide presets path (e.g. /usr/share/amplitron/presets)
     static std::string get_system_presets_dir();
 
-    // Minimal JSON helpers (no external dependency)
-    static std::string to_json(const PresetData& preset);
-    static bool from_json(const std::string& json, PresetData& preset);
 
-    // Escape/unescape strings for JSON
-    static std::string escape_json_string(const std::string& s);
-    static std::string unescape_json_string(const std::string& s);
 };
 
 } // namespace Amplitron

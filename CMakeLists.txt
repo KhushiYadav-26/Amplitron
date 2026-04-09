@@ -132,8 +132,15 @@ endif()
 set(APP_SOURCES
     src/main.cpp
     src/preset_manager.cpp
+    src/preset_json.cpp
     src/audio/audio_engine.cpp
+    src/audio/audio_engine_chain.cpp
+    src/audio/audio_engine_process.cpp
+    src/audio/audio_engine_api.cpp
     src/audio/recorder.cpp
+    src/audio/recorder_session.cpp
+    src/audio/recorder_io.cpp
+    src/audio/recorder_wav.cpp
     src/audio/effects/distortion.cpp
     src/audio/effects/overdrive.cpp
     src/audio/effects/delay.cpp
@@ -154,6 +161,9 @@ set(APP_SOURCES
     src/audio/effects/octaver.cpp
     src/audio/effects/pitch_shifter.cpp
     src/gui/gui_manager.cpp
+    src/gui/gui_manager_frame.cpp
+    src/gui/gui_manager_menu.cpp
+    src/gui/gui_manager_update.cpp
     src/gui/gui_settings.cpp
     src/gui/gui_presets.cpp
     src/gui/gui_recording.cpp
@@ -161,11 +171,19 @@ set(APP_SOURCES
     src/gui/gui_analyzer.cpp
     src/gui/spectrum_analyzer.cpp
     src/gui/pedal_board.cpp
+    src/gui/pedal_board_menu.cpp
+    src/gui/pedal_board_chain.cpp
     src/gui/pedal_widget.cpp
+    src/gui/pedal_widget_body.cpp
+    src/gui/pedal_widget_knobs.cpp
     src/gui/command_history.cpp
     src/gui/gui_snapshots.cpp
     src/midi/midi_manager.cpp
+    src/midi/midi_manager_mapping.cpp
+    src/midi/midi_manager_persist.cpp
     src/gui/gui_midi.cpp
+    src/preset_manager_dirs.cpp
+    src/preset_manager_io.cpp
 )
 
 # --- Platform-specific sources (selected at configure time) ---
@@ -174,8 +192,16 @@ if(EMSCRIPTEN OR ANDROID OR IOS)
     set(BACKEND_SOURCES src/audio/audio_backend_sdl.cpp)
     set(DIALOG_SOURCES  src/gui/file_dialog_web.cpp)
 else()
-    set(BACKEND_SOURCES src/audio/audio_backend_portaudio.cpp)
-    set(DIALOG_SOURCES  src/gui/file_dialog_native.cpp)
+    set(BACKEND_SOURCES
+        src/audio/audio_backend_portaudio.cpp
+        src/audio/audio_backend_portaudio_lifecycle.cpp
+        src/audio/audio_backend_portaudio_devices.cpp
+    )
+    set(DIALOG_SOURCES
+        src/gui/file_dialog_native.cpp
+        src/gui/file_dialog_native_open.cpp
+        src/gui/file_dialog_native_folder.cpp
+    )
 endif()
 
 # =============================================================================
@@ -396,9 +422,20 @@ else() # NOT EMSCRIPTEN, ANDROID, or IOS
     # Effect + core sources needed by tests (no GUI, no main)
     set(CORE_SOURCES
         src/preset_manager.cpp
+        src/preset_json.cpp
+        src/preset_manager_dirs.cpp
+        src/preset_manager_io.cpp
         src/audio/audio_engine.cpp
+        src/audio/audio_engine_chain.cpp
+        src/audio/audio_engine_process.cpp
+        src/audio/audio_engine_api.cpp
         src/audio/audio_backend_portaudio.cpp
+        src/audio/audio_backend_portaudio_lifecycle.cpp
+        src/audio/audio_backend_portaudio_devices.cpp
         src/audio/recorder.cpp
+        src/audio/recorder_session.cpp
+        src/audio/recorder_io.cpp
+        src/audio/recorder_wav.cpp
         src/gui/command_history.cpp
         src/audio/effects/distortion.cpp
         src/audio/effects/overdrive.cpp
@@ -420,6 +457,8 @@ else() # NOT EMSCRIPTEN, ANDROID, or IOS
         src/audio/dsp/wav_loader.cpp
         src/audio/dsp/convolution_engine.cpp
         src/midi/midi_manager.cpp
+        src/midi/midi_manager_mapping.cpp
+        src/midi/midi_manager_persist.cpp
     )
 
     add_executable(amplitron-tests ${TEST_SOURCES} ${CORE_SOURCES} ${KISS_FFT_SOURCES})

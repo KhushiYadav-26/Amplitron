@@ -1,6 +1,6 @@
 // =============================================================================
 // Native file dialog implementations (Windows, macOS, Linux)
-// Save dialog implementation
+// Open dialog implementation
 // =============================================================================
 
 #include "gui/file_dialog.h"
@@ -10,7 +10,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
-#include <shlobj.h>
 #endif
 
 #ifdef __APPLE__
@@ -27,29 +26,21 @@
 namespace Amplitron {
 
 #ifdef _WIN32
-std::string show_save_dialog(const std::string& default_name,
+std::string show_open_dialog(const std::string& title,
                              const std::string& filter_desc,
                              const std::string& filter_ext) {
-    char filename[MAX_PATH];
-    std::strncpy(filename, default_name.c_str(), MAX_PATH - 1);
-    filename[MAX_PATH - 1] = '\0';
+    char filename[MAX_PATH] = "";
 
-    // Build filter string: "WAV Audio (*.wav)\0*.wav\0All Files (*.*)\0*.*\0\0"
     char filter[256];
     std::memset(filter, 0, sizeof(filter));
     int pos = 0;
     pos += snprintf(filter + pos, 256 - pos, "%s (*.%s)", filter_desc.c_str(), filter_ext.c_str());
-    pos++; // null separator
+    pos++;
     pos += snprintf(filter + pos, 256 - pos, "*.%s", filter_ext.c_str());
-    pos++; // null separator
+    pos++;
     pos += snprintf(filter + pos, 256 - pos, "All Files (*.*)");
     pos++;
     pos += snprintf(filter + pos, 256 - pos, "*.*");
-    // double null terminator is already there from memset
-
-    // Get desktop/documents as initial dir
-    char initial_dir[MAX_PATH] = "";
-    SHGetFolderPathA(NULL, CSIDL_DESKTOP, NULL, 0, initial_dir);
 
     OPENFILENAMEA ofn;
     std::memset(&ofn, 0, sizeof(ofn));
@@ -58,59 +49,80 @@ std::string show_save_dialog(const std::string& default_name,
     ofn.lpstrFilter = filter;
     ofn.lpstrFile = filename;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrInitialDir = initial_dir;
-    ofn.lpstrTitle = "Save Recording As";
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    ofn.lpstrDefExt = filter_ext.c_str();
+    ofn.lpstrTitle = title.c_str();
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
-    if (GetSaveFileNameA(&ofn)) {
+    if (GetOpenFileNameA(&ofn)) {
         return std::string(filename);
     }
     return "";
 }
 
 #elif defined(__APPLE__)
-std::string show_save_dialog(const std::string& default_name,
+std::string show_open_dialog(const std::string& title,
                              const std::string& /*filter_desc*/,
                              const std::string& filter_ext) {
-    // Use osascript to show a native NSSavePanel
-    std::string cmd = "osascript -e 'set theFile to POSIX path of (choose file name "
-                      "with prompt \"Save Recording As\" "
-                      "default name \"" + default_name + "\")' 2>/dev/null";
+    // Sanitize title for AppleScript
+    std::string safe_title;
+    for (char c : title) {
+        if (c == '\\') { safe_title += "\\\\"; }
+        else if (c == '"') { safe_title += "\\\""; }
+        else { safe_title += c; }
+    }
 
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if (!pipe) return "";
+    std::string script = "POSIX path of (choose file of type {\"" + filter_ext +
+                         "\"} with prompt \"" + safe_title + "\")";
 
+    // Use fork+exec to invoke osascript directly
+    int pipefd[2];
+    if (pipe(pipefd) != 0) return "";
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return "";
+    }
+
+    if (pid == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
+        execl("/usr/bin/osascript", "osascript", "-e", script.c_str(), nullptr);
+        _exit(1);
+    }
+
+    close(pipefd[1]);
     char buf[1024];
     std::string result;
-    while (fgets(buf, sizeof(buf), pipe)) {
-        result += buf;
-    }
-    pclose(pipe);
+    ssize_t n;
+    while ((n = read(pipefd[0], buf, sizeof(buf))) > 0)
+        result.append(buf, static_cast<size_t>(n));
+    close(pipefd[0]);
 
-    // Trim trailing newline
+    int status = 0;
+    waitpid(pid, &status, 0);
+
     while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
         result.pop_back();
-
-    if (result.empty()) return "";
-
-    // Ensure it ends with the correct extension
-    if (result.size() < filter_ext.size() + 1 ||
-        result.substr(result.size() - filter_ext.size() - 1) != "." + filter_ext) {
-        result += "." + filter_ext;
-    }
 
     return result;
 }
 
 #else // Linux
-std::string show_save_dialog(const std::string& default_name,
+std::string show_open_dialog(const std::string& title,
                              const std::string& filter_desc,
                              const std::string& filter_ext) {
-    // Try zenity first, then kdialog
-    std::string cmd = "zenity --file-selection --save --confirm-overwrite "
-                      "--title='Save Recording As' "
-                      "--filename='" + default_name + "' "
+    std::string safe_title;
+    for (char c : title) {
+        if (c == '\'') { safe_title += "'\\''"; }
+        else { safe_title += c; }
+    }
+
+    std::string cmd = "zenity --file-selection "
+                      "--title='" + safe_title + "' "
                       "--file-filter='" + filter_desc + " (*." + filter_ext + ")|*." + filter_ext + "' "
                       "--file-filter='All Files (*)|*' 2>/dev/null";
 
@@ -122,12 +134,11 @@ std::string show_save_dialog(const std::string& default_name,
     while (fgets(buf, sizeof(buf), pipe)) {
         result += buf;
     }
-    int status = pclose(pipe);
+    int wait_status = pclose(pipe);
 
-    // If zenity failed (not installed), try kdialog
-    if (status != 0) {
-        cmd = "kdialog --getsavefilename ~/ '*." + filter_ext + "|" + filter_desc + "' "
-              "--title 'Save Recording As' 2>/dev/null";
+    if (WIFEXITED(wait_status) && WEXITSTATUS(wait_status) != 0) {
+        cmd = "kdialog --getopenfilename ~/ '*." + filter_ext + "|" + filter_desc + "' "
+              "--title '" + safe_title + "' 2>/dev/null";
         pipe = popen(cmd.c_str(), "r");
         if (!pipe) return "";
         result.clear();
@@ -137,17 +148,8 @@ std::string show_save_dialog(const std::string& default_name,
         pclose(pipe);
     }
 
-    // Trim trailing newline
     while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
         result.pop_back();
-
-    if (result.empty()) return "";
-
-    // Ensure it ends with the correct extension
-    if (result.size() < filter_ext.size() + 1 ||
-        result.substr(result.size() - filter_ext.size() - 1) != "." + filter_ext) {
-        result += "." + filter_ext;
-    }
 
     return result;
 }

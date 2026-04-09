@@ -62,6 +62,14 @@ private:
     /** @brief Render a toggle switch (unused legacy helper). */
     void render_toggle(const char* label, bool* value);
 
+    // Render helpers for decomposing the huge render() function
+    void render_amp_cabinet(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float pedal_width, float pedal_height);
+    void render_standard_pedal(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float pedal_width, bool enabled);
+    void render_tuner_display(ImDrawList* dl, ImVec2 p0, float pedal_width);
+    void render_ir_cabinet_display(ImVec2 p0, float pedal_width);
+    void render_knobs(ImDrawList* dl, ImVec2 p0, float pedal_width, bool is_amp, bool is_tuner, bool is_ir_cab);
+    void render_footswitch_and_extras(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float pedal_width, float pedal_height, bool is_amp, bool enabled, bool& should_remove);
+
     AudioEngine& engine_;
     std::shared_ptr<Effect> effect_;
     int index_;

@@ -9,10 +9,15 @@ namespace Amplitron {
 
 class Distortion : public Effect {
 public:
+    // Create a distortion effect with drive, tone, and output gain controls.
     Distortion();
+    // Apply the distortion curve and filtering to a mono audio buffer.
     void process(float* buffer, int num_samples) override;
+    // Clear any filter state held by the effect.
     void reset() override;
+    // Return the display name for this effect.
     const char* name() const override { return "Distortion"; }
+    // Return editable parameters exposed by this effect.
     std::vector<EffectParam>& params() override { return params_; }
 
 private:

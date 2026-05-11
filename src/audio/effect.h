@@ -21,7 +21,7 @@ class Effect {
 public:
     virtual ~Effect() = default;
 
-    // Process an interleaved mono buffer in place.
+    // Process a mono buffer in place.
     virtual void process(float* buffer, int num_samples) = 0;
 
     // Stereo processing. Default fans mono left channel to both outputs.

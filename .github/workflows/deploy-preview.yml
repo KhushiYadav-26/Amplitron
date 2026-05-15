@@ -1,9 +1,9 @@
-name: PR Preview Pages
+name: Deploy Preview
 
 on:
   workflow_run:
     workflows:
-      - PR Preview Build
+      - Build Preview
     types:
       - completed
   pull_request_target:
@@ -15,7 +15,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: pr-preview-pages-${{ github.event.workflow_run.id || github.event.pull_request.number }}
+  group: deploy-preview-${{ github.event.workflow_run.id || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:

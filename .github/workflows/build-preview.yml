@@ -1,4 +1,4 @@
-name: PR Preview Build
+name: Build Preview
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-preview-build-${{ github.event.pull_request.number }}
+  group: build-preview-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -111,7 +111,7 @@ jobs:
           PR_NUMBER=${{ github.event.pull_request.number }}
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
           PREVIEW_PATH=pr-previews/pr-${{ github.event.pull_request.number }}
-          PREVIEW_URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-previews/pr-${{ github.event.pull_request.number }}/
+          PREVIEW_URL=https://amplitron.sudipmondal.co.in/pr-previews/pr-${{ github.event.pull_request.number }}/
           EOF
 
       - name: Upload preview artifact
